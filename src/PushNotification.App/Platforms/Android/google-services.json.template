@@ -1,0 +1,32 @@
+{
+  "//": "Template only. Replace with the real file downloaded from the Firebase console.",
+  "//2": "Firebase console -> Project settings -> Your apps -> Android app -> google-services.json",
+  "//3": "Save the real file as Platforms/Android/google-services.json (do not commit secrets).",
+  "project_info": {
+    "project_number": "000000000000",
+    "project_id": "your-firebase-project",
+    "storage_bucket": "your-firebase-project.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+        "android_client_info": {
+          "package_name": "com.companyname.pushnotification.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "REPLACE_WITH_FIREBASE_API_KEY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
