@@ -18,6 +18,9 @@ notification preference screen and a device installation registration flow.
 - [Backend contract](#backend-contract)
 - [Replacing the dummy services](#replacing-the-dummy-services)
 
+For a full reference of every class, method and process, see
+[docs/TECHNICAL-DOCUMENTATION.md](docs/TECHNICAL-DOCUMENTATION.md).
+
 ## What the sample shows
 
 - FCM registration and message handling on Android, including the runtime
