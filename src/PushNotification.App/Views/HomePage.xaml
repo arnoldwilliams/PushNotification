@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:PushNotification.App.ViewModels"
+             xmlns:models="clr-namespace:PushNotification.App.Models"
+             x:Class="PushNotification.App.Views.HomePage"
+             x:DataType="vm:HomeViewModel"
+             Title="Push notifications">
+
+    <Grid RowDefinitions="Auto,*" Padding="16" RowSpacing="12">
+
+        <VerticalStackLayout Grid.Row="0" Spacing="10">
+
+            <Label Text="Push notifications"
+                   FontSize="22"
+                   FontAttributes="Bold" />
+
+            <Border StrokeThickness="1"
+                    Stroke="{AppThemeBinding Light=#E0E0E0, Dark=#3A3A3A}"
+                    Padding="12">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="12" />
+                </Border.StrokeShape>
+                <VerticalStackLayout Spacing="6">
+                    <Label Text="{Binding PermissionStatus, StringFormat='Permission: {0}'}" FontSize="13" />
+                    <Label Text="{Binding DeviceToken, StringFormat='Device token: {0}'}"
+                           FontSize="12"
+                           LineBreakMode="TailTruncation"
+                           MaxLines="2" />
+                    <Button Text="Enable push notifications"
+                            Command="{Binding EnablePushCommand}"
+                            Margin="0,4,0,0" />
+                    <Button Text="Refresh status"
+                            Command="{Binding RefreshCommand}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Label Text="Received messages"
+                   FontSize="16"
+                   FontAttributes="Bold" />
+            <Label Text="Foreground messages and taps appear here while the app is running."
+                   FontSize="12"
+                   TextColor="{AppThemeBinding Light=#5A5A5A, Dark=#B8B8B8}" />
+
+        </VerticalStackLayout>
+
+        <CollectionView Grid.Row="1"
+                        ItemsSource="{Binding ReceivedMessages}"
+                        SelectionMode="None">
+            <CollectionView.EmptyView>
+                <Label Text="No messages received yet."
+                       FontSize="13"
+                       HorizontalTextAlignment="Center"
+                       TextColor="{AppThemeBinding Light=#5A5A5A, Dark=#B8B8B8}" />
+            </CollectionView.EmptyView>
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="models:PushMessage">
+                    <Border StrokeThickness="1"
+                            Stroke="{AppThemeBinding Light=#E0E0E0, Dark=#3A3A3A}"
+                            Padding="12"
+                            Margin="0,0,0,8">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="12" />
+                        </Border.StrokeShape>
+                        <VerticalStackLayout Spacing="2">
+                            <Label Text="{Binding Title}" FontAttributes="Bold" />
+                            <Label Text="{Binding Body}" FontSize="13" />
+                            <Label Text="{Binding ReceivedAtUtc, StringFormat='{0:g} UTC'}"
+                                   FontSize="11"
+                                   TextColor="{AppThemeBinding Light=#5A5A5A, Dark=#B8B8B8}" />
+                        </VerticalStackLayout>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+    </Grid>
+</ContentPage>

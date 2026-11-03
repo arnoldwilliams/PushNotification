@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Shell
+    x:Class="PushNotification.App.AppShell"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:views="clr-namespace:PushNotification.App.Views"
+    Title="Push Notification Sample">
+
+    <TabBar>
+        <ShellContent
+            Title="Home"
+            ContentTemplate="{DataTemplate views:HomePage}"
+            Route="home" />
+        <ShellContent
+            Title="Preferences"
+            ContentTemplate="{DataTemplate views:NotificationPreferencesPage}"
+            Route="preferences" />
+        <ShellContent
+            Title="Device"
+            ContentTemplate="{DataTemplate views:DeviceInfoPage}"
+            Route="device" />
+    </TabBar>
+
+</Shell>

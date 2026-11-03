@@ -1,0 +1,14 @@
+# Build outputs
+bin/
+obj/
+
+# User-specific files
+.vs/
+*.user
+*.suo
+
+# OS-generated files
+.DS_Store
+
+# Firebase config contains an API key; keep the real file out of source control.
+Platforms/Android/google-services.json

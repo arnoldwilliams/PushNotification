@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PushNotification.App/PushNotification.App.csproj" />
+  </Folder>
+</Solution>
