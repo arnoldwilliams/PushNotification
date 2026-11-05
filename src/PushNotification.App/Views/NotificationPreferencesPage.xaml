@@ -1,83 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:vm="clr-namespace:PushNotification.App.ViewModels"
              x:Class="PushNotification.App.Views.NotificationPreferencesPage"
-             x:DataType="vm:NotificationPreferencesViewModel"
              Title="Notification preferences">
 
-    <Grid RowDefinitions="Auto,*,Auto" Padding="16" RowSpacing="12">
+    <ContentView x:Name="Host" />
 
-        <VerticalStackLayout Grid.Row="0" Spacing="4">
-            <Label Text="Choose what you want to hear about"
-                   FontSize="20"
-                   FontAttributes="Bold" />
-            <Label Text="Turn individual topics on or off. Changes are saved to this device and synced with the server."
-                   FontSize="13"
-                   TextColor="{AppThemeBinding Light=#5A5A5A, Dark=#B8B8B8}" />
-        </VerticalStackLayout>
-
-        <ScrollView Grid.Row="1">
-            <VerticalStackLayout Spacing="12">
-
-                <Border StrokeThickness="1"
-                        Stroke="{AppThemeBinding Light=#E0E0E0, Dark=#3A3A3A}"
-                        Padding="12">
-                    <Border.StrokeShape>
-                        <RoundRectangle CornerRadius="12" />
-                    </Border.StrokeShape>
-                    <Grid ColumnDefinitions="*,Auto">
-                        <VerticalStackLayout Grid.Column="0" Spacing="2">
-                            <Label Text="All notifications" FontAttributes="Bold" />
-                            <Label Text="Master switch for every topic below."
-                                   FontSize="12"
-                                   TextColor="{AppThemeBinding Light=#5A5A5A, Dark=#B8B8B8}" />
-                        </VerticalStackLayout>
-                        <Switch Grid.Column="1"
-                                IsToggled="{Binding AllEnabled}"
-                                VerticalOptions="Center" />
-                    </Grid>
-                </Border>
-
-                <CollectionView ItemsSource="{Binding Preferences}"
-                                SelectionMode="None">
-                    <CollectionView.ItemTemplate>
-                        <DataTemplate x:DataType="vm:NotificationPreferenceItem">
-                            <Border StrokeThickness="1"
-                                    Stroke="{AppThemeBinding Light=#E0E0E0, Dark=#3A3A3A}"
-                                    Padding="12"
-                                    Margin="0,0,0,8">
-                                <Border.StrokeShape>
-                                    <RoundRectangle CornerRadius="12" />
-                                </Border.StrokeShape>
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <VerticalStackLayout Grid.Column="0" Spacing="2">
-                                        <Label Text="{Binding DisplayName}" FontAttributes="Bold" />
-                                        <Label Text="{Binding Description}"
-                                               FontSize="12"
-                                               TextColor="{AppThemeBinding Light=#5A5A5A, Dark=#B8B8B8}" />
-                                    </VerticalStackLayout>
-                                    <Switch Grid.Column="1"
-                                            IsToggled="{Binding IsEnabled}"
-                                            VerticalOptions="Center" />
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </CollectionView.ItemTemplate>
-                </CollectionView>
-
-            </VerticalStackLayout>
-        </ScrollView>
-
-        <VerticalStackLayout Grid.Row="2" Spacing="6">
-            <ActivityIndicator IsRunning="{Binding IsBusy}"
-                               IsVisible="{Binding IsBusy}"
-                               HorizontalOptions="Center" />
-            <Label Text="{Binding StatusMessage}"
-                   FontSize="12"
-                   HorizontalTextAlignment="Center"
-                   TextColor="{AppThemeBinding Light=#5A5A5A, Dark=#B8B8B8}" />
-        </VerticalStackLayout>
-
-    </Grid>
 </ContentPage>

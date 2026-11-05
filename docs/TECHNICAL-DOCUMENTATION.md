@@ -39,6 +39,10 @@ mobile app on iOS and Android:
 
 The app also provides:
 
+- A **guided permission flow** started from a button on the Home screen. The app first
+  shows an in-app soft prompt explaining why notifications are useful; only when the user
+  agrees does it show the operating system permission dialog. When the user allows the OS
+  permission the notification preference view opens as a popup.
 - A **notification preference screen** where the user opts in or out of six notification
   topics, with a master switch.
 - A **device information screen** that displays the installation record and exposes
@@ -59,6 +63,9 @@ The app also provides:
    does not block saving the user's local choice.
 4. **Desktop targets stay runnable.** Windows and Mac Catalyst register fallback
    implementations so the shared UI compiles and runs everywhere.
+5. **Permission is asked in context.** The soft prompt is shown before the OS dialog so the
+   user understands the value first, which is the pattern Apple and Google recommend. The OS
+   dialog is only shown after the user agrees, and the preference popup follows a grant.
 
 ---
 
@@ -87,10 +94,12 @@ src/PushNotification.App/
     PlatformType.cs                          Platform enum
     PushConfiguration.cs                     Runtime provider configuration
     PushMessage.cs                           Normalized received message
+    PushPermissionOutcome.cs                 Result of the guided permission flow
   Services/
     IDeviceInfoProvider.cs                   Device metadata contract
     DeviceInfoProvider.cs                    MAUI Essentials implementation
     PushRegistrationCoordinator.cs           Lifecycle orchestration
+    PushPermissionFlowService.cs             Soft prompt -> OS prompt -> preference popup
     Api/
       IDeviceRegistrationService.cs          Backend contract
       DummyDeviceRegistrationService.cs      Logging implementation
@@ -110,7 +119,10 @@ src/PushNotification.App/
     DeviceInfoViewModel.cs                   Device screen logic + DeviceInfoRow
   Views/
     HomePage.xaml / .xaml.cs
-    NotificationPreferencesPage.xaml / .xaml.cs
+    NotificationPreferencesView.xaml / .xaml.cs       Shared preference view
+    NotificationPreferencesPage.xaml / .xaml.cs       Preferences tab host
+    NotificationPreferencesPopupPage.xaml / .xaml.cs  Preference popup
+    NotificationPreferencesDialogService.cs           Popup presenter
     DeviceInfoPage.xaml / .xaml.cs
   Platforms/
     Android/
@@ -269,6 +281,8 @@ compile-time symbols:
 | `IDeviceRegistrationService` | `DummyDeviceRegistrationService` | Singleton |
 | `INotificationPreferencesService` | `NotificationPreferencesService` | Singleton |
 | `IPushRegistrationCoordinator` | `PushRegistrationCoordinator` | Singleton |
+| `IPushPermissionFlowService` | `PushPermissionFlowService` | Singleton |
+| `INotificationPreferencesDialogService` | `NotificationPreferencesDialogService` | Singleton |
 | `AppShell` | `AppShell` | Singleton |
 | `HomeViewModel` / `HomePage` | — | Singleton |
 | `NotificationPreferencesViewModel` / `NotificationPreferencesPage` | — | Singleton |
@@ -393,6 +407,20 @@ Normalized received message shared by both platforms:
 | `Data` | `IDictionary<string, string>` | Custom key/value payload |
 | `WasForeground` | `bool` | Whether the app was in the foreground |
 | `ReceivedAtUtc` | `DateTimeOffset` | Receive timestamp |
+
+### 5.10 `PushPermissionOutcome` (`Models/PushPermissionOutcome.cs`)
+
+Enum describing how the guided permission flow finished:
+
+| Value | Meaning |
+| --- | --- |
+| `Unavailable` | No visible page was available to host the soft prompt |
+| `SoftPromptDeclined` | The user declined the soft prompt or dismissed it; the OS was never prompted |
+| `OsPermissionDenied` | The operating system dialog reported a denial |
+| `OsPermissionGranted` | The user allowed the OS permission; preferences may be shown |
+
+The distinction between a soft prompt decline and an OS denial matters: a decline does not
+count as an OS-level denial, so the app can still show the OS dialog later.
 
 ---
 
@@ -795,6 +823,44 @@ Fires when the provider rotates the token. Caches the new token and re-runs
 `RegisterWithBackendAsync` so the backend always holds a live token. Failures are logged as
 warnings. This is an `async void` event handler; exceptions are caught inside the method.
 
+### 6.13 `IPushPermissionFlowService` / `PushPermissionFlowService`
+
+`Services/PushPermissionFlowService.cs`. Orchestrates the guided permission experience so
+the OS dialog is only shown after the user has agreed in the app.
+
+- `record PushPermissionFlowResult(PushPermissionOutcome Outcome, NotificationPermissionStatus PermissionStatus, DeviceRegistrationResult? RegistrationResult)`
+  — the outcome of a run. `IsGranted` is `true` when the outcome is
+  `PushPermissionOutcome.OsPermissionGranted`.
+- `Task<PushPermissionFlowResult> RequestPermissionWithSoftPromptAsync(bool showPreferencesOnGrant = true, CancellationToken cancellationToken = default)`
+  — the single entry point. It:
+  1. Resolves the visible page. When there is none it returns
+     `PushPermissionOutcome.Unavailable` without prompting.
+  2. Shows the in-app soft prompt (`DisplayAlertAsync` with "Continue" / "Not now"). A
+     decline or dismissal returns `PushPermissionOutcome.SoftPromptDeclined` and the OS is
+     never asked.
+  3. Calls `INotificationPermissionService.RequestAsync()`, which shows the operating system
+     dialog. A non-granted status returns `PushPermissionOutcome.OsPermissionDenied`.
+  4. On a grant, calls `IPushRegistrationCoordinator.RegisterAsync(requestPermission: false)`
+     to obtain the token and register the device, then, when `showPreferencesOnGrant` is
+     `true`, calls `INotificationPreferencesDialogService.ShowAsync()` to open the preference
+     popup.
+  5. Returns `PushPermissionOutcome.OsPermissionGranted` with the permission status and the
+     registration result.
+
+The service keeps the OS dialog behind an explicit user agreement, which is the behavior
+both Apple and Google recommend. It also means a user who declines the soft prompt is not
+counted as an OS-level denial, so the OS dialog can still be shown later.
+
+### 6.14 `INotificationPreferencesDialogService` / `NotificationPreferencesDialogService`
+
+`Views/NotificationPreferencesDialogService.cs`. Presents the notification preference view
+as a popup.
+
+- `Task ShowAsync(CancellationToken cancellationToken = default)` — resolves the visible
+  page, creates `NotificationPreferencesPopupPage` with the shared
+  `NotificationPreferencesViewModel`, and pushes it with `PushModalAsync`. The task
+  completes when the modal page is presented; the popup stays until the user closes it.
+
 ---
 
 ## 7. Platform integration
@@ -1043,12 +1109,13 @@ which is the template default.
 
 - Subscribes to `MessageReceived` and `NotificationTapped` in the constructor.
 - `ObservableCollection<PushMessage> ReceivedMessages`
-- `ICommand EnablePushCommand`, `RefreshCommand`
+- `ICommand RequestPermissionCommand`, `RefreshCommand`
 - `string PermissionStatus`, `string DeviceToken` — private setters.
 - `Task LoadAsync()` — delegates to `RefreshAsync`.
-- `private async Task EnablePushAsync()` — guards on `IsBusy`, calls
-  `IPushRegistrationCoordinator.RegisterAsync()` (which requests permission), reports the
-  result, and refreshes.
+- `private async Task RequestPermissionAsync()` — guards on `IsBusy`, calls
+  `IPushPermissionFlowService.RequestPermissionWithSoftPromptAsync()` (which shows the soft
+  prompt, then the OS dialog, then the preference popup), maps the outcome to a status
+  message, and refreshes.
 - `private async Task RefreshAsync()` — reads the permission status and resolves the token
   from `CurrentDeviceToken`, falling back to `IPushNotificationService.GetDeviceTokenAsync()`,
   showing `"Not available"` when empty.
@@ -1074,25 +1141,52 @@ resolved from DI. `Title="Push Notification Sample"`.
 `x:DataType="vm:HomeViewModel"`. A two-row grid:
 
 - Header stack: title, a bordered card showing `PermissionStatus` and `DeviceToken`
-  (truncated to two lines), an "Enable push notifications" button bound to
-  `EnablePushCommand`, and a "Refresh status" button bound to `RefreshCommand`.
+  (truncated to two lines), an "Enable notifications" button bound to
+  `RequestPermissionCommand` (which starts the guided soft prompt flow), and a
+  "Refresh status" button bound to `RefreshCommand`.
 - A `CollectionView` bound to `ReceivedMessages` with an empty view reading
   "No messages received yet." Each item shows title, body and a `ReceivedAtUtc` timestamp.
 
 Code-behind resolves `HomeViewModel` from DI, sets `BindingContext`, and calls
 `LoadAsync()` from `OnAppearing`.
 
-### 9.3 `NotificationPreferencesPage.xaml`
+### 9.3 `NotificationPreferencesView.xaml`
 
-`x:DataType="vm:NotificationPreferencesViewModel"`. Three rows:
+`x:DataType="vm:NotificationPreferencesViewModel"`. The single definition of the preference
+UI, shared by the Preferences tab and the post-permission popup. It is a `ContentView` with
+a code-behind constructor that takes the view model, because XAML cannot resolve a
+constructor-injected view model. Three rows:
 
-- Header with title and explanatory subtitle.
+- Header with title, explanatory subtitle and a Close button. The button is hidden by
+  default and shown by setting `ShowCloseButton`, which the popup does.
 - A `ScrollView` containing a master-switch card (bound to `AllEnabled`) and a
   `CollectionView` of `NotificationPreferenceItem` rows, each with a `Switch` bound to
   `IsEnabled`.
 - Footer with an `ActivityIndicator` bound to `IsBusy` and a `StatusMessage` label.
 
-### 9.4 `DeviceInfoPage.xaml`
+The view raises `CloseRequested` when the Close button is tapped and exposes `LoadAsync()`,
+which the hosts call from `OnAppearing`.
+
+### 9.4 `NotificationPreferencesPage.xaml`
+
+The Preferences tab. A thin `ContentPage` whose `Host` `ContentView` holds a
+`NotificationPreferencesView` created in the code-behind with the injected view model. It
+calls `LoadAsync()` from `OnAppearing`.
+
+### 9.5 `NotificationPreferencesPopupPage.xaml` and `NotificationPreferencesDialogService`
+
+`NotificationPreferencesPopupPage` is the popup shown after the user allows the OS
+permission. It is a modal `ContentPage` with a transparent background, a scrim `BoxView`
+that dismisses the popup when tapped, and a rounded `Card` `Border` that hosts the same
+`NotificationPreferencesView` (with `ShowCloseButton = true`). The card is capped at
+520 x 640 so it reads as a dialog on tablets.
+
+`NotificationPreferencesDialogService` implements `INotificationPreferencesDialogService`.
+`ShowAsync` resolves the visible page, creates the popup with the shared view model and
+pushes it with `PushModalAsync`. Keeping this behind an interface means
+`PushPermissionFlowService` does not touch the navigation stack directly.
+
+### 9.6 `DeviceInfoPage.xaml`
 
 `x:DataType="vm:DeviceInfoViewModel"`. Three rows:
 
@@ -1101,7 +1195,7 @@ Code-behind resolves `HomeViewModel` from DI, sets `BindingContext`, and calls
 - Footer with `IsBusy`, `StatusMessage` and a three-button grid: Register, Save and
   Unregister, bound to the corresponding commands.
 
-All three pages call the view model's `LoadAsync` from `OnAppearing`, so navigating to a tab
+All pages call the view model's `LoadAsync` from `OnAppearing`, so navigating to a tab
 refreshes its data.
 
 ---
@@ -1129,37 +1223,46 @@ MAUI host
 No push provider is initialized at startup. Initialization happens on the first
 `RegisterAsync`, which keeps the permission prompt tied to a user action.
 
-### 10.2 Permission request and device registration
+### 10.2 Guided permission request and device registration
 
 ```
-User taps "Enable push notifications" (HomePage)
-  -> HomeViewModel.EnablePushAsync
-       -> PushRegistrationCoordinator.RegisterAsync(requestPermission: true)
-            1. INotificationPermissionService.RequestAsync
+User taps "Enable notifications" (HomePage)
+  -> HomeViewModel.RequestPermissionAsync
+       -> PushPermissionFlowService.RequestPermissionWithSoftPromptAsync(showPreferencesOnGrant: true)
+            1. resolve the visible page; none -> PushPermissionOutcome.Unavailable
+            2. soft prompt: Page.DisplayAlertAsync("Turn on notifications?", ..., "Continue", "Not now")
+                 "Not now" / dismiss -> PushPermissionOutcome.SoftPromptDeclined (OS never asked)
+            3. user agreed -> INotificationPermissionService.RequestAsync
                  Android: Platform.CurrentActivity + ActivityCompat.RequestPermissions
                           -> MainActivity.OnRequestPermissionsResult
                           -> AndroidNotificationPermissionService.HandlePermissionResult
                  iOS:     UNUserNotificationCenter.RequestAuthorizationAsync(Alert|Badge|Sound)
-            2. status != Granted -> return Fail
-            3. IPushNotificationService.InitializeAsync(BuildPushConfiguration())
-                 Android: attach bridge handlers, create notification channel
-                 iOS:     attach bridge handlers, RegisterForRemoteNotifications
-            4. IPushNotificationService.GetDeviceTokenAsync()
-                 Android: FirebaseMessaging.Instance.GetToken()
-                 iOS:     ApplePushBridge.DeviceToken (may be null on first pass)
-            5. token blank -> return Fail("Device token is not available yet.")
-            6. RegisterWithBackendAsync(token)
-                 a. IDeviceInfoProvider.GetDeviceInfo()
-                 b. build DeviceRegistrationRequest (id, token, platform, app version, topics)
-                 c. IDeviceRegistrationService.RegisterDeviceAsync      -> POST /api/devices/register
-                 d. IDeviceRegistrationService.SaveInstallationAsync    -> PUT  /api/installations/{id}
-                 e. INotificationPreferencesService.SynchronizeSubscriptionsAsync()
-       -> HomeViewModel reports the result and refreshes the token display
+            4. status != Granted -> PushPermissionOutcome.OsPermissionDenied
+            5. status == Granted -> IPushRegistrationCoordinator.RegisterAsync(requestPermission: false)
+                 a. IPushNotificationService.InitializeAsync(BuildPushConfiguration())
+                      Android: attach bridge handlers, create notification channel
+                      iOS:     attach bridge handlers, RegisterForRemoteNotifications
+                 b. IPushNotificationService.GetDeviceTokenAsync()
+                      Android: FirebaseMessaging.Instance.GetToken()
+                      iOS:     ApplePushBridge.DeviceToken (may be null on first pass)
+                 c. token blank -> Fail("Device token is not available yet.")
+                 d. RegisterWithBackendAsync(token)
+                      i.   IDeviceInfoProvider.GetDeviceInfo()
+                      ii.  build DeviceRegistrationRequest (id, token, platform, app version, topics)
+                      iii. IDeviceRegistrationService.RegisterDeviceAsync      -> POST /api/devices/register
+                      iv.  IDeviceRegistrationService.SaveInstallationAsync    -> PUT  /api/installations/{id}
+                      v.   INotificationPreferencesService.SynchronizeSubscriptionsAsync()
+            6. INotificationPreferencesDialogService.ShowAsync()
+                 -> PushModalAsync(NotificationPreferencesPopupPage with the shared view model)
+       -> HomeViewModel maps the outcome to a status message and refreshes the token display
 ```
 
-On iOS the first pass often returns `Fail("Device token is not available yet.")` because the
-APNs token arrives asynchronously. The token callback then drives the retry described in
-section 10.3, which performs the registration without a further prompt.
+Because the flow calls `RegisterAsync(requestPermission: false)`, the coordinator reads the
+permission that was just granted rather than prompting a second time. On iOS the first pass
+often returns `Fail("Device token is not available yet.")` because the APNs token arrives
+asynchronously. The token callback then drives the retry described in section 10.3, which
+performs the registration without a further prompt. The preference popup is shown
+regardless, so the user can choose topics as soon as permission is granted.
 
 ### 10.3 Token refresh
 

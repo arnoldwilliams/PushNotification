@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="PushNotification.App.Views.NotificationPreferencesPopupPage"
+             BackgroundColor="Transparent"
+             Shell.NavBarIsVisible="False">
+
+    <Grid>
+
+        <!-- Scrim: tapping outside the card dismisses the popup. -->
+        <BoxView Color="#99000000">
+            <BoxView.GestureRecognizers>
+                <TapGestureRecognizer Tapped="OnScrimTapped" />
+            </BoxView.GestureRecognizers>
+        </BoxView>
+
+        <Border x:Name="Card"
+                StrokeThickness="1"
+                Stroke="{AppThemeBinding Light=#E0E0E0, Dark=#3A3A3A}"
+                BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#1F1F1F}"
+                Margin="20"
+                HorizontalOptions="Center"
+                VerticalOptions="Center"
+                MaximumWidthRequest="520"
+                MaximumHeightRequest="640">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="16" />
+            </Border.StrokeShape>
+        </Border>
+
+    </Grid>
+</ContentPage>

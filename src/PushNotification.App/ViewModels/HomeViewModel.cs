@@ -16,29 +16,36 @@ public sealed class HomeViewModel : BaseViewModel
     private readonly IPushRegistrationCoordinator _coordinator;
     private readonly IPushNotificationService _pushNotificationService;
     private readonly INotificationPermissionService _permissionService;
+    private readonly IPushPermissionFlowService _permissionFlow;
     private readonly ILogger<HomeViewModel> _logger;
 
     public HomeViewModel(
         IPushRegistrationCoordinator coordinator,
         IPushNotificationService pushNotificationService,
         INotificationPermissionService permissionService,
+        IPushPermissionFlowService permissionFlow,
         ILogger<HomeViewModel> logger)
     {
         _coordinator = coordinator;
         _pushNotificationService = pushNotificationService;
         _permissionService = permissionService;
+        _permissionFlow = permissionFlow;
         _logger = logger;
 
         _pushNotificationService.MessageReceived += OnMessageReceived;
         _pushNotificationService.NotificationTapped += OnNotificationTapped;
 
-        EnablePushCommand = new Command(async () => await EnablePushAsync());
+        RequestPermissionCommand = new Command(async () => await RequestPermissionAsync());
         RefreshCommand = new Command(async () => await RefreshAsync());
     }
 
     public ObservableCollection<PushMessage> ReceivedMessages { get; } = new();
 
-    public ICommand EnablePushCommand { get; }
+    /// <summary>
+    /// Starts the guided permission flow: in-app soft prompt, then the operating system
+    /// dialog, then the notification preference popup once permission is granted.
+    /// </summary>
+    public ICommand RequestPermissionCommand { get; }
 
     public ICommand RefreshCommand { get; }
 
@@ -63,7 +70,7 @@ public sealed class HomeViewModel : BaseViewModel
         await RefreshAsync().ConfigureAwait(true);
     }
 
-    private async Task EnablePushAsync()
+    private async Task RequestPermissionAsync()
     {
         if (IsBusy)
         {
@@ -73,17 +80,27 @@ public sealed class HomeViewModel : BaseViewModel
         try
         {
             IsBusy = true;
-            StatusMessage = "Requesting permission and registering...";
+            StatusMessage = "Waiting for your choice...";
 
-            var result = await _coordinator.RegisterAsync().ConfigureAwait(true);
-            StatusMessage = result.Success ? result.Message ?? "Registered." : result.Message ?? "Not registered.";
+            var result = await _permissionFlow.RequestPermissionWithSoftPromptAsync().ConfigureAwait(true);
+
+            StatusMessage = result.Outcome switch
+            {
+                PushPermissionOutcome.OsPermissionGranted =>
+                    result.RegistrationResult?.Message ?? "Notifications enabled.",
+                PushPermissionOutcome.OsPermissionDenied =>
+                    "Notifications stay off until you allow them in system settings.",
+                PushPermissionOutcome.SoftPromptDeclined =>
+                    "No problem. You can turn notifications on later.",
+                _ => "Could not request notification permission.",
+            };
 
             await RefreshAsync().ConfigureAwait(true);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to enable push notifications.");
-            StatusMessage = "Could not enable push notifications.";
+            _logger.LogError(ex, "Failed to run the push permission flow.");
+            StatusMessage = "Could not request notification permission.";
         }
         finally
         {
