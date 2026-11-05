@@ -27,8 +27,8 @@
                            FontSize="12"
                            LineBreakMode="TailTruncation"
                            MaxLines="2" />
-                    <Button Text="Enable push notifications"
-                            Command="{Binding EnablePushCommand}"
+                    <Button Text="Enable notifications"
+                            Command="{Binding RequestPermissionCommand}"
                             Margin="0,4,0,0" />
                     <Button Text="Refresh status"
                             Command="{Binding RefreshCommand}" />

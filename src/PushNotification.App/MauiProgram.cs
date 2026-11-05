@@ -58,6 +58,8 @@ public static class MauiProgram
         services.AddSingleton<IDeviceRegistrationService, DummyDeviceRegistrationService>();
         services.AddSingleton<INotificationPreferencesService, NotificationPreferencesService>();
         services.AddSingleton<IPushRegistrationCoordinator, PushRegistrationCoordinator>();
+        services.AddSingleton<IPushPermissionFlowService, PushPermissionFlowService>();
+        services.AddSingleton<INotificationPreferencesDialogService, NotificationPreferencesDialogService>();
 
         services.AddSingleton<AppShell>();
         services.AddSingleton<HomeViewModel>();

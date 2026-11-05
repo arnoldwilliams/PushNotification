@@ -19,14 +19,20 @@ notification preference screen and a device installation registration flow.
 - [Replacing the dummy services](#replacing-the-dummy-services)
 
 For a full reference of every class, method and process, see
-[docs/TECHNICAL-DOCUMENTATION.md](docs/TECHNICAL-DOCUMENTATION.md).
+[docs/TECHNICAL-DOCUMENTATION.md](docs/TECHNICAL-DOCUMENTATION.md). For an exhaustive
+method-level reference of every type, member, binding and process, see
+[docs/COMPLETE-CODE-REFERENCE.md](docs/COMPLETE-CODE-REFERENCE.md).
 
 ## What the sample shows
 
+- A guided permission flow started from the Home screen: an in-app soft prompt asks the user
+  to allow notifications, the operating system dialog appears only after the user agrees, and
+  the notification preference view opens as a popup once the permission is granted.
 - FCM registration and message handling on Android, including the runtime
   `POST_NOTIFICATIONS` permission introduced in Android 13.
 - APNs registration, foreground presentation and tap handling on iOS.
-- A notification preference screen where a user opts in or out of individual topics.
+- A notification preference screen where a user opts in or out of individual topics. The same
+  view is reused inside the post-permission popup.
 - A device information screen that registers the device and saves the installation
   record (InstallationId, DeviceToken, Platform, Model and more) through dummy services.
 - A clean service boundary so the dummy services can be swapped for real HTTP calls.
@@ -44,8 +50,10 @@ src/PushNotification.App/
     Preferences/            Topic opt-in persistence and subscription sync
     DeviceInfoProvider.cs   Builds the installation snapshot
     PushRegistrationCoordinator.cs
+    PushPermissionFlowService.cs  Soft prompt -> OS prompt -> preference popup
   ViewModels/               MVVM view models
-  Views/                    Home, Notification preferences, Device info pages
+  Views/                    Home, Notification preferences (shared view, tab host and popup),
+                            Device info pages
   Platforms/
     Android/                FCM service, permission handling, message mapping
     iOS/                    APNs AppDelegate, permission handling
@@ -119,13 +127,18 @@ overridden with an environment variable prefixed with `PUSH_`, for example
 
 1. `MauiProgram` registers the shared services and, per platform, the push and permission
    implementations.
-2. `PushRegistrationCoordinator.RegisterAsync` requests notification permission,
-   initializes the push provider, reads the device token and calls the backend.
-3. Android token refreshes arrive through `AppFirebaseMessagingService`, which forwards
+2. Tapping "Enable notifications" on the Home screen runs `PushPermissionFlowService`. It
+   shows an in-app soft prompt first. Only when the user agrees does it call
+   `INotificationPermissionService.RequestAsync` to show the operating system dialog. Once
+   permission is granted it registers the device and opens the notification preference view
+   as a popup.
+3. `PushRegistrationCoordinator.RegisterAsync` reads the permission, initializes the push
+   provider, reads the device token and calls the backend.
+4. Android token refreshes arrive through `AppFirebaseMessagingService`, which forwards
    them to `FirebasePushBridge` and then to the singleton push service.
-4. iOS device tokens and notification callbacks arrive in `AppDelegate`, which forwards
+5. iOS device tokens and notification callbacks arrive in `AppDelegate`, which forwards
    them to `ApplePushBridge`.
-5. `NotificationPreferencesService` stores each topic opt-in in `IPreferences`, updates
+6. `NotificationPreferencesService` stores each topic opt-in in `IPreferences`, updates
    the provider subscription and syncs the choice with the backend.
 
 ## Backend contract
