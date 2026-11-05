@@ -19,7 +19,9 @@ notification preference screen and a device installation registration flow.
 - [Replacing the dummy services](#replacing-the-dummy-services)
 
 For a full reference of every class, method and process, see
-[docs/TECHNICAL-DOCUMENTATION.md](docs/TECHNICAL-DOCUMENTATION.md).
+[docs/TECHNICAL-DOCUMENTATION.md](docs/TECHNICAL-DOCUMENTATION.md). For an exhaustive
+method-level reference of every type, member, binding and process, see
+[docs/COMPLETE-CODE-REFERENCE.md](docs/COMPLETE-CODE-REFERENCE.md).
 
 ## What the sample shows
 
