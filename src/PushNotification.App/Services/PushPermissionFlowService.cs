@@ -94,12 +94,18 @@ public sealed class PushPermissionFlowService : IPushPermissionFlowService
         return new PushPermissionFlowResult(PushPermissionOutcome.OsPermissionGranted, status, registration);
     }
 
-    private static Task<bool> ShowSoftPromptAsync(Page page) =>
-        MainThread.InvokeOnMainThreadAsync(() =>
-            page.DisplayAlertAsync(
-                "Turn on notifications?",
-                "Stay up to date with account alerts, order updates and the topics you choose. " +
-                "You can change or turn off notifications at any time.",
-                "Continue",
-                "Not now"));
+    /// <summary>
+    /// Shows the customisable soft prompt page modally and waits for the user's answer.
+    /// Returns true only when the user taps Yes. Dismissing the page (scrim tap) is a No.
+    /// </summary>
+    private static async Task<bool> ShowSoftPromptAsync(Page page)
+    {
+        var prompt = new NotificationSoftPromptPage();
+        await MainThread.InvokeOnMainThreadAsync(() => page.Navigation.PushModalAsync(prompt)).ConfigureAwait(true);
+
+        var agrees = await prompt.Result.ConfigureAwait(true);
+
+        await MainThread.InvokeOnMainThreadAsync(() => page.Navigation.PopModalAsync()).ConfigureAwait(true);
+        return agrees;
+    }
 }
