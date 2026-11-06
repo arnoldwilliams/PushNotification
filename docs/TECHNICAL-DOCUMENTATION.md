@@ -119,6 +119,7 @@ src/PushNotification.App/
     DeviceInfoViewModel.cs                   Device screen logic + DeviceInfoRow
   Views/
     HomePage.xaml / .xaml.cs
+    NotificationSoftPromptPage.xaml / .xaml.cs         Customisable soft prompt popup
     NotificationPreferencesView.xaml / .xaml.cs       Shared preference view
     NotificationPreferencesPage.xaml / .xaml.cs       Preferences tab host
     NotificationPreferencesPopupPage.xaml / .xaml.cs  Preference popup
@@ -835,9 +836,11 @@ the OS dialog is only shown after the user has agreed in the app.
   — the single entry point. It:
   1. Resolves the visible page. When there is none it returns
      `PushPermissionOutcome.Unavailable` without prompting.
-  2. Shows the in-app soft prompt (`DisplayAlertAsync` with "Continue" / "Not now"). A
-     decline or dismissal returns `PushPermissionOutcome.SoftPromptDeclined` and the OS is
-     never asked.
+  2. Shows the customisable soft prompt page
+     (`NotificationSoftPromptPage`, default title "Notification Request" and message
+     "Allow Bansoft to send notification for updates", with Yes / No buttons) by pushing it
+     modally and awaiting its `Result`. A No, a scrim tap or a back press returns
+     `PushPermissionOutcome.SoftPromptDeclined` and the OS is never asked.
   3. Calls `INotificationPermissionService.RequestAsync()`, which shows the operating system
      dialog. A non-granted status returns `PushPermissionOutcome.OsPermissionDenied`.
   4. On a grant, calls `IPushRegistrationCoordinator.RegisterAsync(requestPermission: false)`
@@ -1150,7 +1153,35 @@ resolved from DI. `Title="Push Notification Sample"`.
 Code-behind resolves `HomeViewModel` from DI, sets `BindingContext`, and calls
 `LoadAsync()` from `OnAppearing`.
 
-### 9.3 `NotificationPreferencesView.xaml`
+### 9.3 `NotificationSoftPromptPage.xaml`
+
+The customisable soft prompt shown before the operating system permission dialog. It is a
+modal `ContentPage` with a transparent background and a scrim `BoxView` that dismisses the
+prompt (as a No) when tapped. Inside a rounded `Border` card (capped at 480 wide) there is a
+`VerticalStackLayout` with:
+
+- `TitleLabel` — the prompt title, default "Notification Request".
+- `MessageLabel` — the prompt message, default
+  "Allow Bansoft to send notification for updates".
+- A two-column button grid: `DeclineButton` ("No") and `AcceptButton` ("Yes").
+
+Because it is a real page, the wording, styling, buttons and layout can be customised freely
+without touching the permission flow. The constructor accepts optional `title`, `message`,
+`acceptText` and `declineText` arguments, so the same page can be reused for any
+confirmation.
+
+Code-behind:
+
+- `private readonly TaskCompletionSource<bool> _completion` — completed once when the user
+  answers.
+- `Task<bool> Result` — the caller awaits this. `true` for Yes, `false` for No.
+- `OnAcceptClicked` / `OnDeclineClicked` — set the result to `true` / `false`.
+- `OnBackButtonPressed()` — sets the result to `false` so a back gesture never hangs the
+  flow.
+
+The page does not dismiss itself; the caller pops the modal after awaiting `Result`.
+
+### 9.4 `NotificationPreferencesView.xaml`
 
 `x:DataType="vm:NotificationPreferencesViewModel"`. The single definition of the preference
 UI, shared by the Preferences tab and the post-permission popup. It is a `ContentView` with
@@ -1230,8 +1261,10 @@ User taps "Enable notifications" (HomePage)
   -> HomeViewModel.RequestPermissionAsync
        -> PushPermissionFlowService.RequestPermissionWithSoftPromptAsync(showPreferencesOnGrant: true)
             1. resolve the visible page; none -> PushPermissionOutcome.Unavailable
-            2. soft prompt: Page.DisplayAlertAsync("Turn on notifications?", ..., "Continue", "Not now")
-                 "Not now" / dismiss -> PushPermissionOutcome.SoftPromptDeclined (OS never asked)
+            2. soft prompt: PushModalAsync(NotificationSoftPromptPage)
+                 default title "Notification Request", message
+                 "Allow Bansoft to send notification for updates", Yes / No buttons
+                 "No" / scrim tap / back -> PushPermissionOutcome.SoftPromptDeclined (OS never asked)
             3. user agreed -> INotificationPermissionService.RequestAsync
                  Android: Platform.CurrentActivity + ActivityCompat.RequestPermissions
                           -> MainActivity.OnRequestPermissionsResult

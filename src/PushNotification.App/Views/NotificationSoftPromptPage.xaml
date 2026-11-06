@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="PushNotification.App.Views.NotificationSoftPromptPage"
+             BackgroundColor="Transparent"
+             Shell.NavBarIsVisible="False">
+
+    <Grid>
+
+        <!-- Scrim: tapping outside the card dismisses the prompt as a No. -->
+        <BoxView Color="#99000000">
+            <BoxView.GestureRecognizers>
+                <TapGestureRecognizer Tapped="OnDeclineClicked" />
+            </BoxView.GestureRecognizers>
+        </BoxView>
+
+        <Border StrokeThickness="1"
+                Stroke="{AppThemeBinding Light=#E0E0E0, Dark=#3A3A3A}"
+                BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#1F1F1F}"
+                Margin="20"
+                HorizontalOptions="Center"
+                VerticalOptions="Center"
+                MaximumWidthRequest="480">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="16" />
+            </Border.StrokeShape>
+
+            <VerticalStackLayout Padding="20" Spacing="16">
+
+                <Label x:Name="TitleLabel"
+                       Text="Notification Request"
+                       FontSize="20"
+                       FontAttributes="Bold" />
+
+                <Label x:Name="MessageLabel"
+                       Text="Allow Bansoft to send notification for updates"
+                       FontSize="14"
+                       TextColor="{AppThemeBinding Light=#5A5A5A, Dark=#B8B8B8}" />
+
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                    <Button x:Name="DeclineButton"
+                            Grid.Column="0"
+                            Text="No"
+                            Clicked="OnDeclineClicked" />
+                    <Button x:Name="AcceptButton"
+                            Grid.Column="1"
+                            Text="Yes"
+                            Clicked="OnAcceptClicked" />
+                </Grid>
+
+            </VerticalStackLayout>
+        </Border>
+
+    </Grid>
+</ContentPage>

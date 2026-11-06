@@ -25,9 +25,11 @@ method-level reference of every type, member, binding and process, see
 
 ## What the sample shows
 
-- A guided permission flow started from the Home screen: an in-app soft prompt asks the user
-  to allow notifications, the operating system dialog appears only after the user agrees, and
-  the notification preference view opens as a popup once the permission is granted.
+- A guided permission flow started from the Home screen: a customisable soft prompt page
+  (title "Notification Request", message "Allow Bansoft to send notification for updates",
+  with Yes and No buttons) asks the user to allow notifications, the operating system dialog
+  appears only after the user taps Yes, and the notification preference view opens as a popup
+  once the permission is granted.
 - FCM registration and message handling on Android, including the runtime
   `POST_NOTIFICATIONS` permission introduced in Android 13.
 - APNs registration, foreground presentation and tap handling on iOS.
@@ -128,7 +130,8 @@ overridden with an environment variable prefixed with `PUSH_`, for example
 1. `MauiProgram` registers the shared services and, per platform, the push and permission
    implementations.
 2. Tapping "Enable notifications" on the Home screen runs `PushPermissionFlowService`. It
-   shows an in-app soft prompt first. Only when the user agrees does it call
+   shows a customisable soft prompt page (`NotificationSoftPromptPage`) with Yes and No
+   buttons. Only when the user taps Yes does it call
    `INotificationPermissionService.RequestAsync` to show the operating system dialog. Once
    permission is granted it registers the device and opens the notification preference view
    as a popup.

@@ -99,6 +99,7 @@ src/PushNotification.App/
     HomePage.xaml / .xaml.cs                            Home tab
     NotificationPreferencesView.xaml / .xaml.cs         Shared preference view
     NotificationPreferencesPage.xaml / .xaml.cs         Preferences tab host
+    NotificationSoftPromptPage.xaml / .xaml.cs         Customisable soft prompt popup
     NotificationPreferencesPopupPage.xaml / .xaml.cs    Preference popup
     NotificationPreferencesDialogService.cs             Popup presenter
     DeviceInfoPage.xaml / .xaml.cs                      Device tab
@@ -774,10 +775,15 @@ Stores the four dependencies.
 5. When `showPreferencesOnGrant`, `await _preferencesDialog.ShowAsync()`.
 6. Returns `new PushPermissionFlowResult(OsPermissionGranted, status, registration)`.
 
-#### `private static Task<bool> ShowSoftPromptAsync(Page page)`
+#### `private static async Task<bool> ShowSoftPromptAsync(Page page)`
 
-`MainThread.InvokeOnMainThreadAsync(() => page.DisplayAlertAsync("Turn on notifications?", "...", "Continue", "Not now"))`.
-Returns `true` for Continue and `false` for Not now or a dismissal.
+1. `prompt = new NotificationSoftPromptPage()` — the customisable popup page.
+2. `await MainThread.InvokeOnMainThreadAsync(() => page.Navigation.PushModalAsync(prompt))`.
+3. `agrees = await prompt.Result` — waits for Yes / No.
+4. `await MainThread.InvokeOnMainThreadAsync(() => page.Navigation.PopModalAsync())`.
+5. Returns `agrees`.
+
+Returns `true` only for Yes. A No tap, a scrim tap or a back press all resolve to `false`.
 
 ### 7.10 `INotificationPreferencesDialogService` / `NotificationPreferencesDialogService`
 
@@ -1171,7 +1177,34 @@ The boolean return from `SetProperty` lets a setter run a side effect only on a 
 Code-behind: constructor takes `HomeViewModel`, sets `BindingContext`; `OnAppearing` calls
 `LoadAsync()`.
 
-### 10.2 `NotificationPreferencesView` (`Views/NotificationPreferencesView.xaml`, `.xaml.cs`)
+### 10.2 `NotificationSoftPromptPage` (`Views/NotificationSoftPromptPage.xaml`, `.xaml.cs`)
+
+The customisable soft prompt shown before the operating system permission dialog.
+`BackgroundColor="Transparent"`, `Shell.NavBarIsVisible="False"`.
+
+- A scrim `BoxView` (`Color="#99000000"`) with a `TapGestureRecognizer` bound to
+  `OnDeclineClicked` — tapping outside the card is a No.
+- A rounded `Border` (`MaximumWidthRequest="480"`) containing a `VerticalStackLayout` with
+  `Padding="20"` and `Spacing="16"`:
+  - `TitleLabel` — default text "Notification Request", bold, size 20.
+  - `MessageLabel` — default text "Allow Bansoft to send notification for updates", size 14.
+  - A two-column grid with `DeclineButton` ("No") and `AcceptButton` ("Yes").
+
+Code-behind members:
+
+| Member | Signature | Notes |
+| --- | --- | --- |
+| `_completion` | `private readonly TaskCompletionSource<bool>` | `RunContinuationsAsynchronously` |
+| Constructor | `NotificationSoftPromptPage(string title = "Notification Request", string message = "Allow Bansoft to send notification for updates", string acceptText = "Yes", string declineText = "No")` | `InitializeComponent()`, then assigns each label/button text |
+| `Result` | `Task<bool> { get; }` | `_completion.Task`; `true` for Yes |
+| `OnBackButtonPressed` | `protected override bool OnBackButtonPressed()` | Sets the result to `false`, then calls base |
+| `OnAcceptClicked` | `private void OnAcceptClicked(object?, EventArgs)` | `_completion.TrySetResult(true)` |
+| `OnDeclineClicked` | `private void OnDeclineClicked(object?, EventArgs)` | `_completion.TrySetResult(false)` |
+
+The page does not dismiss itself; the caller pops the modal after awaiting `Result`. The
+optional constructor arguments let the same page render any two-button confirmation.
+
+### 10.3 `NotificationPreferencesView` (`Views/NotificationPreferencesView.xaml`, `.xaml.cs`)
 
 `x:DataType="vm:NotificationPreferencesViewModel"`. The single definition of the preference
 UI. It is a `ContentView` whose code-behind constructor takes the view model.
@@ -1194,7 +1227,7 @@ Code-behind members:
 | `LoadAsync` | `Task LoadAsync()` | `_viewModel.LoadAsync()` |
 | `OnCloseClicked` | `private void OnCloseClicked(object?, EventArgs)` | Raises `CloseRequested` |
 
-### 10.3 `NotificationPreferencesPage` (`Views/NotificationPreferencesPage.xaml`, `.xaml.cs`)
+### 10.4 `NotificationPreferencesPage` (`Views/NotificationPreferencesPage.xaml`, `.xaml.cs`)
 
 The Preferences tab. `Title="Notification preferences"`. Body is a single
 `<ContentView x:Name="Host" />`.
@@ -1203,7 +1236,7 @@ Code-behind: constructor takes `NotificationPreferencesViewModel`, creates a
 `NotificationPreferencesView(viewModel)` and assigns it to `Host.Content`; `OnAppearing`
 calls `_preferencesView.LoadAsync()`.
 
-### 10.4 `NotificationPreferencesPopupPage` (`Views/NotificationPreferencesPopupPage.xaml`, `.xaml.cs`)
+### 10.5 `NotificationPreferencesPopupPage` (`Views/NotificationPreferencesPopupPage.xaml`, `.xaml.cs`)
 
 The post-permission popup. `BackgroundColor="Transparent"`, `Shell.NavBarIsVisible="False"`.
 
@@ -1221,11 +1254,11 @@ Code-behind:
 | `OnCloseRequested` | `private async void OnCloseRequested(object?, EventArgs)` | `await Navigation.PopModalAsync()` |
 | `OnScrimTapped` | `private async void OnScrimTapped(object?, TappedEventArgs)` | `await Navigation.PopModalAsync()` |
 
-### 10.5 `NotificationPreferencesDialogService` (`Views/NotificationPreferencesDialogService.cs`)
+### 10.6 `NotificationPreferencesDialogService` (`Views/NotificationPreferencesDialogService.cs`)
 
 See [7.10](#710-inotificationpreferencesdialogservice--notificationpreferencesdialogservice).
 
-### 10.6 `DeviceInfoPage` (`Views/DeviceInfoPage.xaml`, `.xaml.cs`)
+### 10.7 `DeviceInfoPage` (`Views/DeviceInfoPage.xaml`, `.xaml.cs`)
 
 `x:DataType="vm:DeviceInfoViewModel"`, `Title="Device & registration"`. Three-row grid:
 
@@ -1273,8 +1306,10 @@ User taps "Enable notifications" (HomePage)
   -> HomeViewModel.RequestPermissionAsync
        -> PushPermissionFlowService.RequestPermissionWithSoftPromptAsync(showPreferencesOnGrant: true)
             1. resolve the visible page; none -> PushPermissionOutcome.Unavailable
-            2. soft prompt: Page.DisplayAlertAsync("Turn on notifications?", ..., "Continue", "Not now")
-                 "Not now" / dismiss -> PushPermissionOutcome.SoftPromptDeclined (OS never asked)
+            2. soft prompt: PushModalAsync(NotificationSoftPromptPage)
+                 default title "Notification Request", message
+                 "Allow Bansoft to send notification for updates", Yes / No buttons
+                 "No" / scrim tap / back -> PushPermissionOutcome.SoftPromptDeclined (OS never asked)
             3. user agreed -> INotificationPermissionService.RequestAsync
                  Android: Platform.CurrentActivity + ActivityCompat.RequestPermissions
                           -> MainActivity.OnRequestPermissionsResult
@@ -1491,8 +1526,12 @@ send an authorization header from the real `IDeviceRegistrationService`.
 
 ### 13.5 Customising the soft prompt
 
-Edit the strings in `PushPermissionFlowService.ShowSoftPromptAsync`, or replace the
-`DisplayAlertAsync` call with a custom content page for a richer prompt.
+`NotificationSoftPromptPage` is a real page, so its wording, styling, buttons and layout can
+be changed freely without touching the permission flow. Pass a different `title`, `message`,
+`acceptText` or `declineText` to the constructor, or edit the XAML directly. To use a
+different page entirely, replace the `new NotificationSoftPromptPage()` line in
+`PushPermissionFlowService.ShowSoftPromptAsync` with your own page that exposes a
+`Task<bool> Result`.
 
 ---
 
@@ -1612,6 +1651,8 @@ Alphabetical index of the notable members and where they are defined.
 | `NotificationPreferencesService` | class | `Services/Preferences/NotificationPreferencesService.cs` |
 | `NotificationPreferencesView` | class | `Views/NotificationPreferencesView.xaml.cs` |
 | `NotificationPreferencesViewModel` | class | `ViewModels/NotificationPreferencesViewModel.cs` |
+| `NotificationSoftPromptPage` | class | `Views/NotificationSoftPromptPage.xaml.cs` |
+| `OnAcceptClicked` / `OnDeclineClicked` / `OnBackButtonPressed` | event handlers / override | `Views/NotificationSoftPromptPage.xaml.cs` |
 | `OnCloseClicked` / `OnCloseRequested` / `OnScrimTapped` | event handlers | preference views |
 | `OnItemToggled` | private method | `ViewModels/NotificationPreferencesViewModel.cs` |
 | `OnMessageReceived` | event handler | push services and `HomeViewModel` |
