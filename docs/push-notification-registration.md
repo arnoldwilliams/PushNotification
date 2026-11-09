@@ -127,20 +127,36 @@ public async Task InitializeAsync()
         Subscribe();                                  // token / message / tap events
 
         DeviceId = _deviceInstallationService.GetDeviceId();
-        DeviceToken = await _secureStorageService.GetCacheItemAsync(Constants.PushToken);
+
+        // Restore the last known registration so returning users see their state immediately.
+        var cachedToken = await _secureStorageService.GetCacheItemAsync(Constants.PushToken);
+        DeviceToken = cachedToken;
+        IsRegistered = !string.IsNullOrWhiteSpace(cachedToken);
 
         if (!_deviceInstallationService.NotificationsSupported) { ... return; }
 
         if (!await _pushNotificationService.RequestPermissionAsync()) { ... return; }
 
         var token = await _pushNotificationService.GetPushChannelTokenAsync();
-        if (string.IsNullOrWhiteSpace(token)) { ... return; }
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            // Keep the cached state; the last known token may still be valid server side.
+            StatusMessage = IsRegistered
+                ? "Using the last known push token; the live token could not be resolved."
+                : "Unable to resolve a push channel token.";
+            return;
+        }
 
         await ApplyTokenAsync(token);                 // RefreshRegistrationAsync under the hood
     }
     finally { IsBusy = false; }
 }
 ```
+
+The cached token is not dead code: it seeds `DeviceToken` and `IsRegistered` before the live
+token is resolved, and it survives as a fallback when the live token cannot be obtained. It is
+only ever written on a successful registration (in `ApplyTokenAsync`) and removed on
+deregistration, so its presence means the last attempt succeeded.
 
 `ApplyTokenAsync` is the single place that writes the token and calls the backend:
 
@@ -154,6 +170,11 @@ private async Task ApplyTokenAsync(string token)
 
     IsRegistered = result.IsSuccess;
     StatusMessage = result.IsSuccess ? "Device registered…" : $"Registration failed: {…}";
+
+    if (result.IsSuccess)
+    {
+        await _secureStorageService.SaveItemToCacheAsync(Constants.PushToken, token);
+    }
 }
 ```
 

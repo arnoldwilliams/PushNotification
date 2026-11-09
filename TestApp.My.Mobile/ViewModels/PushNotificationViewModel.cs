@@ -103,10 +103,15 @@ namespace TestApp.My.Mobile.ViewModels
 
                 DeviceId = _deviceInstallationService.GetDeviceId();
 
-                // Show the last known token straight away; the live token is resolved below.
-                DeviceToken = await _secureStorageService
+                // Restore the last known registration from secure storage so returning users see
+                // their state immediately. The token is only written on a successful registration
+                // and removed on deregistration, so its presence means the last attempt succeeded.
+                var cachedToken = await _secureStorageService
                     .GetCacheItemAsync(Constants.PushToken)
                     .ConfigureAwait(true);
+
+                DeviceToken = cachedToken;
+                IsRegistered = !string.IsNullOrWhiteSpace(cachedToken);
 
                 if (!_deviceInstallationService.NotificationsSupported)
                 {
@@ -128,8 +133,10 @@ namespace TestApp.My.Mobile.ViewModels
 
                 if (string.IsNullOrWhiteSpace(token))
                 {
-                    IsRegistered = false;
-                    StatusMessage = "Unable to resolve a push channel token.";
+                    // Keep the cached state; the last known token may still be valid server side.
+                    StatusMessage = IsRegistered
+                        ? "Using the last known push token; the live token could not be resolved."
+                        : "Unable to resolve a push channel token.";
                     return;
                 }
 
@@ -161,6 +168,13 @@ namespace TestApp.My.Mobile.ViewModels
 
                 if (result?.IsSuccess == true)
                 {
+                    // The backend removed the installation; drop the cached token so the next
+                    // InitializeAsync does not restore a stale "registered" state.
+                    await _secureStorageService
+                        .RemoveCacheItemAsync(Constants.PushToken)
+                        .ConfigureAwait(true);
+
+                    DeviceToken = null;
                     IsRegistered = false;
                     StatusMessage = "Device deregistered.";
                 }
