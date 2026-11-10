@@ -25,17 +25,28 @@ namespace TestApp.My.Mobile.Platforms.iOS
 
         public event EventHandler<string> NotificationOpened = delegate { };
 
-        public async Task<bool> RequestPermissionAsync()
+        public Task<bool> RequestPermissionAsync()
         {
             var options = UNAuthorizationOptions.Alert
                           | UNAuthorizationOptions.Badge
                           | UNAuthorizationOptions.Sound;
 
-            var (granted, _) = await UNUserNotificationCenter.Current
-                .RequestAuthorizationAsync(options)
-                .ConfigureAwait(true);
+            var completion = new TaskCompletionSource<bool>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
 
-            return granted;
+            UNUserNotificationCenter.Current.RequestAuthorization(options, (granted, error) =>
+            {
+                if (error != null)
+                {
+                    completion.TrySetException(
+                        new InvalidOperationException($"Notification authorization failed: {error.LocalizedDescription}"));
+                    return;
+                }
+
+                completion.TrySetResult(granted);
+            });
+
+            return completion.Task;
         }
 
         public Task<string> GetPushChannelTokenAsync()
@@ -65,7 +76,7 @@ namespace TestApp.My.Mobile.Platforms.iOS
                 return;
             }
 
-            var token = deviceToken.Description?.Trim('<', '>').Replace(" ", string.Empty);
+            var token = deviceToken.ToHexString();
 
             if (string.IsNullOrEmpty(token))
             {

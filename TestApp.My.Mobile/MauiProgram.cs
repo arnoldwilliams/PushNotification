@@ -20,7 +20,16 @@ namespace TestApp.My.Mobile
                 {
                     // Add your fonts here, e.g.
                     // fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
-                });
+                })
+#if IOS
+                .ConfigureMauiHandlers(handlers =>
+                {
+                    // Replace the default iOS Shell renderer with one that can show a native tab bar
+                    // badge, which the push notification view model drives through UpdateBadgeMessage.
+                    handlers.AddHandler<Shell, Platforms.iOS.BadgeShellRenderer>();
+                })
+#endif
+                ;
 
             RegisterSharedServices(builder.Services);
 
