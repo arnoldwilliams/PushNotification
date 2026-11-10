@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:TestApp.My.Mobile.ViewModels"
+             x:Class="TestApp.My.Mobile.Views.MainPage"
+             x:DataType="vm:PushNotificationViewModel"
+             Title="Push Notifications">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="24" Spacing="16">
+
+            <Label Text="Device Registration"
+                   FontSize="22"
+                   FontAttributes="Bold" />
+
+            <Label Text="{Binding StatusMessage}"
+                   FontSize="15" />
+
+            <Label Text="Device Id"
+                   FontAttributes="Bold" />
+            <Label Text="{Binding DeviceId}" />
+
+            <Label Text="Push Channel Token"
+                   FontAttributes="Bold" />
+            <Label Text="{Binding DeviceToken}" LineBreakMode="CharacterWrap" />
+
+            <HorizontalStackLayout Spacing="12">
+                <Button Text="Register"
+                        Command="{Binding InitializeCommand}"
+                        IsEnabled="{Binding IsBusy, Converter={StaticResource InvertedBoolConverter}}" />
+                <Button Text="Deregister"
+                        Command="{Binding DeregisterCommand}"
+                        IsEnabled="{Binding IsBusy, Converter={StaticResource InvertedBoolConverter}}" />
+                <ActivityIndicator IsRunning="{Binding IsBusy}"
+                                   IsVisible="{Binding IsBusy}" />
+            </HorizontalStackLayout>
+
+            <BoxView HeightRequest="1" Color="Gray" />
+
+            <Label Text="Last Message"
+                   FontSize="18"
+                   FontAttributes="Bold" />
+            <Label Text="{Binding LastMessageTitle}" FontAttributes="Bold" />
+            <Label Text="{Binding LastMessageBody}" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>
