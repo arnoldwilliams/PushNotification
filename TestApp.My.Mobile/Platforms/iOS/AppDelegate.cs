@@ -1,18 +1,19 @@
 using Foundation;
-using MyTestApp.Dto.Notifications;
 using TestApp.My.Mobile.Helpers;
 using TestApp.My.Mobile.Interfaces;
+using TestApp.My.Mobile.Platforms.iOS;
 using UIKit;
 using UserNotifications;
 
 namespace TestApp.My.Mobile
 {
     /// <summary>
-    /// iOS app delegate.
+    /// iOS application delegate.
     /// <para>
-    /// It forwards the APNs callbacks (token registration, remote notification) to
+    /// It only forwards the APNs callbacks (token registration, remote notification, failure) to
     /// <see cref="IPushNotificationEventSink"/>, which the view model is subscribed to. No
-    /// registration work happens here, which mirrors the Android change (nothing in OnCreate).
+    /// registration work happens here, which mirrors the Android change where nothing registers in
+    /// <c>MainActivity.OnCreate</c>.
     /// </para>
     /// </summary>
     [Register("AppDelegate")]
@@ -20,88 +21,38 @@ namespace TestApp.My.Mobile
     {
         protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
 
-        public override bool FinishedLaunching(UIApplication application, NSDictionary launchOptions)
+        public override bool FinishedLaunching(UIApplication application, NSDictionary? launchOptions)
         {
-            UNUserNotificationCenter.Current.Delegate = new NotificationCenterDelegate();
+            UNUserNotificationCenter.Current.Delegate = new PushNotificationDelegate();
 
             return base.FinishedLaunching(application, launchOptions);
         }
 
+        /// <summary>
+        /// Called once APNs has issued the device token. The token is handed to
+        /// <see cref="iOSPushNotificationService"/>, which raises <c>TokenRefreshed</c> for the
+        /// view model; registration itself stays in the view model.
+        /// </summary>
         public override void RegisteredForRemoteNotifications(UIApplication application, NSData deviceToken)
         {
-            ServiceHelper.GetService<Platforms.iOS.iOSPushNotificationService>()
-                ?.RegisterDeviceToken(deviceToken);
+            ServiceHelper.GetService<iOSPushNotificationService>()?
+                .RegisterDeviceToken(deviceToken);
         }
 
         public override void FailedToRegisterForRemoteNotifications(UIApplication application, NSError error)
         {
-            ServiceHelper.GetService<Platforms.iOS.iOSPushNotificationService>()
-                ?.RegisterFailed(error);
+            ServiceHelper.GetService<iOSPushNotificationService>()?
+                .RegisterFailed(error);
         }
 
         public override void ReceivedRemoteNotification(UIApplication application, NSDictionary userInfo)
         {
+            userInfo?.ShowRemoteNotification();
+
             var message = PushMessageFactory.Build(userInfo);
 
             ServiceHelper.GetService<IPushNotificationEventSink>()?
                 .RaiseNotificationReceived(message);
-        }
-    }
-
-    /// <summary>
-    /// Shows notifications while the app is in the foreground and forwards taps (deep links).
-    /// </summary>
-    public sealed class NotificationCenterDelegate : UNUserNotificationCenterDelegate
-    {
-        public override void WillPresentNotification(
-            UNUserNotificationCenter center,
-            UNNotification notification,
-            Action<UNNotificationPresentationOptions> completionHandler)
-        {
-            var message = PushMessageFactory.Build(notification.Request.Content.UserInfo);
-
-            ServiceHelper.GetService<IPushNotificationEventSink>()?
-                .RaiseNotificationReceived(message);
-
-            completionHandler(UNNotificationPresentationOptions.Alert
-                              | UNNotificationPresentationOptions.Badge
-                              | UNNotificationPresentationOptions.Sound);
-        }
-
-        public override void DidReceiveNotificationResponse(
-            UNUserNotificationCenter center,
-            UNNotificationResponse response,
-            Action completionHandler)
-        {
-            var userInfo = response.Notification.Request.Content.UserInfo;
-
-            var url = userInfo?[new NSString("externalDetailsUrl")]?.ToString();
-
-            if (!string.IsNullOrWhiteSpace(url))
-            {
-                ServiceHelper.GetService<IPushNotificationEventSink>()?
-                    .RaiseNotificationOpened(url);
-            }
-
-            completionHandler();
-        }
-    }
-
-    internal static class PushMessageFactory
-    {
-        public static PushMessageDto Build(NSDictionary userInfo)
-        {
-            string Get(string key) => userInfo?[new NSString(key)]?.ToString() ?? string.Empty;
-
-            return new PushMessageDto
-            {
-                Title = Get("title"),
-                Body = Get("body"),
-                Category = Get("category"),
-                JsonPayload = Get("jsonPayload"),
-                ExternalDetailsUrl = Get("externalDetailsUrl"),
-                CreatedAtUtc = DateTime.UtcNow
-            };
         }
     }
 }

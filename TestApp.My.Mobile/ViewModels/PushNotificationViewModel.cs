@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using MyTestApp.Dto.Notifications;
 using TestApp.My.Mobile.Common;
 using TestApp.My.Mobile.Helpers;
@@ -229,6 +230,9 @@ namespace TestApp.My.Mobile.ViewModels
             LastMessageBody = message?.Body;
 
             MessageBus.Instance.Publish(Constants.NotificationReceived, message);
+
+            // Ask the iOS Shell renderer to show a native tab bar badge. Android ignores this.
+            WeakReferenceMessenger.Default.Send(new UpdateBadgeMessage(1));
         }
 
         private void OnNotificationOpened(object? sender, string url)

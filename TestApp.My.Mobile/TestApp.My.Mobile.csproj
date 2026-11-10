@@ -17,8 +17,23 @@
 
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
 
-    <CodesignEntitlements Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">Platforms/iOS/Entitlements.plist</CodesignEntitlements>
+  <!--
+    iOS app manifest and entitlements.
+
+    MAUI single project auto-detects Platforms/iOS/Info.plist and auto-assigns
+    Platforms/iOS/Entitlements.plist, but the sample ships configuration specific copies
+    (Info.Debug.plist / Entitlements.Debug.plist). Setting the two MSBuild properties below
+    explicitly makes the iOS SDK use the right file per configuration and disables the
+    auto-detection (it only runs while AppBundleManifest is empty).
+  -->
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
+    <AppBundleManifest Condition="'$(Configuration)' == 'Debug'">Platforms/iOS/Info.Debug.plist</AppBundleManifest>
+    <AppBundleManifest Condition="'$(Configuration)' != 'Debug'">Platforms/iOS/Info.plist</AppBundleManifest>
+
+    <CodesignEntitlements Condition="'$(Configuration)' == 'Debug'">Platforms/iOS/Entitlements.Debug.plist</CodesignEntitlements>
+    <CodesignEntitlements Condition="'$(Configuration)' != 'Debug'">Platforms/iOS/Entitlements.plist</CodesignEntitlements>
   </PropertyGroup>
 
   <!-- NuGet feeds. The .NET for Android/iOS workloads add the Microsoft feeds automatically. -->

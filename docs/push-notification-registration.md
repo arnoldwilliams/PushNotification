@@ -309,17 +309,62 @@ app delegate, so the flow is event based.
 
 - `FinishedLaunching` sets `UNUserNotificationCenter.Current.Delegate`.
 - `RegisteredForRemoteNotifications` forwards the token to `iOSPushNotificationService`.
-- `ReceivedRemoteNotification` raises `RaiseNotificationReceived`.
-- `NotificationCenterDelegate` shows foreground notifications and raises
-  `RaiseNotificationOpened` on tap.
+- `FailedToRegisterForRemoteNotifications` forwards the error to `iOSPushNotificationService`.
+- `ReceivedRemoteNotification` shows the payload and raises `RaiseNotificationReceived`.
 
 No registration work happens in the delegate, mirroring the Android change.
 
-### 7.4 `Info.plist` and `Entitlements.plist`
+### 7.4 `PushNotificationDelegate`
+
+`UNUserNotificationCenterDelegate` for the app:
+
+- `WillPresentNotification` shows banner, list, badge and sound while the app is in the
+  foreground and raises `RaiseNotificationReceived`.
+- `DidReceiveNotificationResponse` handles a tap (including deep links) and raises
+  `RaiseNotificationOpened` through `PushMessageFactory` / `NSDataExtensions`.
+
+Both callbacks forward to `IPushNotificationEventSink`; the view model decides what to do.
+
+### 7.5 Supporting iOS files
+
+- `Program.cs` — entry point (`UIApplication.Main(args, null, typeof(AppDelegate))`).
+- `PushMessageFactory.cs` — maps an APNs `NSDictionary` payload to `PushMessageDto`.
+- `NSDataExtensions.cs` — `ToHexString` for the APNs device token and
+  `ShowRemoteNotification` for the payload.
+- `BadgeShellRenderer.cs` — `ShellRenderer` that shows a native tab bar badge driven by
+  `UpdateBadgeMessage` (published by the view model when a push arrives).
+- `PlainShellRenderer.cs` — renderer with a plain tab bar appearance.
+
+### 7.6 `Info.plist` and `Entitlements.plist`
 
 - `Info.plist` declares `UIBackgroundModes = remote-notification`.
 - `Entitlements.plist` sets `aps-environment`. Use `production` for release builds.
-- The `.csproj` wires `CodesignEntitlements` to `Platforms/iOS/Entitlements.plist`.
+- The sample ships per-configuration copies (`Info.Debug.plist`, `Entitlements.Debug.plist`)
+  and the `.csproj` selects them explicitly:
+
+```xml
+<AppBundleManifest Condition="'$(Configuration)' == 'Debug'">Platforms/iOS/Info.Debug.plist</AppBundleManifest>
+<AppBundleManifest Condition="'$(Configuration)' != 'Debug'">Platforms/iOS/Info.plist</AppBundleManifest>
+<CodesignEntitlements Condition="'$(Configuration)' == 'Debug'">Platforms/iOS/Entitlements.Debug.plist</CodesignEntitlements>
+<CodesignEntitlements Condition="'$(Configuration)' != 'Debug'">Platforms/iOS/Entitlements.plist</CodesignEntitlements>
+```
+
+Setting `AppBundleManifest` also disables the MAUI auto-detection of `Platforms/iOS/Info.plist`,
+which is what allows the per-configuration copies to take effect.
+
+### 7.7 Compiling the iOS files without macOS
+
+The iOS target needs the `ios` workload and Xcode, so `dotnet build -f net10.0-ios` only runs on
+macOS. The iOS files can still be type checked anywhere by compiling them against the
+`Microsoft.iOS.Ref` reference assembly and the MAUI iOS reference assemblies:
+
+```bash
+# compile Platforms/iOS/*.cs + the small set of shared types it depends on
+dotnet build check.csproj   # TargetFramework net10.0, Reference -> Microsoft.iOS.dll + MAUI libs
+```
+
+This catches missing `using` directives and API signature mismatches. It is how the
+`LoggingService` import in `PushNotificationDelegate.cs` was found and fixed.
 
 ## 8. Shared services
 
