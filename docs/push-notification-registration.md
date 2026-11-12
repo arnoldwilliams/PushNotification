@@ -372,7 +372,8 @@ This catches missing `using` directives and API signature mismatches. It is how 
 
 Same public surface as the original file, moved to the sample project:
 
-- `RefreshRegistrationAsync(string)` — re-registers when the cached token differs.
+- `RefreshRegistrationAsync(string)` — re-registers when the cached token differs **and** an
+  access token and tags are present in secure storage.
 - `RegisterDeviceAsync(string tags)` — posts to `{BasePushNotificationsUrl}/installations`.
 - `DeregisterDeviceAsync()` — deletes `{BasePushNotificationsUrl}/installations/{deviceId}`.
 - `SaveDeviceRegistrationDetailsAsync`, `DeleteDeviceRegistrationDetailsAsync`,
@@ -383,6 +384,10 @@ Changes from the original:
 - Implements `INotificationRegistrationService`.
 - `RefreshRegistrationAsync` returns `NotificationRegistrationResult` instead of `Task`, so
   the view model can show a message without catching exceptions from `ContinueWith`.
+- `RefreshRegistrationAsync` only calls `RegisterDeviceAsync` when both the access token
+  (`AccessToken`) and the tags (`PushTags`) exist in secure storage. Registration needs the
+  access token for the `Authorization` header and the tags stored with the last successful
+  registration; when either is missing the call is skipped and a failure result is returned.
 - Failures are returned as results (and logged) instead of being rethrown, so a failed
   registration cannot crash the UI thread.
 - Uses `System.Text.Json` through `IHttpCommunication` instead of `Newtonsoft.Json`.

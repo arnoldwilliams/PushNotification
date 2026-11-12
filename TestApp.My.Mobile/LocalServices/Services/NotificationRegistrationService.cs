@@ -48,14 +48,26 @@ namespace TestApp.My.Mobile.LocalServices.Services
                     .GetCacheItemAsync(Helpers.Constants.PushToken)
                     .ConfigureAwait(false);
 
-                var strTags = await _secureStorageService
-                    .GetCacheItemAsync(Helpers.Constants.PushTags)
-                    .ConfigureAwait(false);
-
                 if (cachedToken == pushChannelToken)
                 {
                     // Nothing changed since the last successful registration.
                     return NotificationRegistrationResult.Success();
+                }
+
+                // Registration requires the credentials the backend expects: the access token
+                // (Authorization header) and the tags that were stored with the last successful
+                // registration. Without both there is nothing meaningful to (re)register.
+                var accessToken = await _secureStorageService.GetAccessToken().ConfigureAwait(false);
+
+                var strTags = await _secureStorageService
+                    .GetCacheItemAsync(Helpers.Constants.PushTags)
+                    .ConfigureAwait(false);
+
+                if (string.IsNullOrWhiteSpace(accessToken) || string.IsNullOrWhiteSpace(strTags))
+                {
+                    return NotificationRegistrationResult.Failure(
+                        "Registration Credentials",
+                        "An access token and tags are required before the device can be registered.");
                 }
 
                 return await RegisterDeviceAsync(strTags).ConfigureAwait(false);
