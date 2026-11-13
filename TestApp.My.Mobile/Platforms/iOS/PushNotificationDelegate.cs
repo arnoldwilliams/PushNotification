@@ -50,6 +50,15 @@ namespace TestApp.My.Mobile.Platforms.iOS
                 if (userInfo != null)
                 {
                     userInfo.ShowRemoteNotification();
+
+                    var message = PushMessageFactory.Build(userInfo);
+
+                    if (!string.IsNullOrWhiteSpace(message.ExternalDetailsUrl))
+                    {
+                        // Hand the deep link to the view model through the platform service.
+                        ServiceHelper.GetService<IPushNotificationEventSink>()?
+                            .RaiseNotificationOpened(message.ExternalDetailsUrl);
+                    }
                 }
 
                 completionHandler();

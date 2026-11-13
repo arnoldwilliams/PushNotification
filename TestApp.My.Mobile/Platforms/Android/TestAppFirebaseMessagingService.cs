@@ -7,6 +7,7 @@ using MyTestApp.Dto.Notifications;
 using MyTestApp.Dto.Notifications.Service;
 using TestApp.My.Mobile.Helpers;
 using TestApp.My.Mobile.Interfaces;
+using TestApp.My.Mobile.Services;
 using Constants = TestApp.My.Mobile.Helpers.Constants;
 
 namespace TestApp.My.Mobile.Platforms.Android
@@ -39,8 +40,21 @@ namespace TestApp.My.Mobile.Platforms.Android
 
             var pushMessage = BuildPushMessage(message);
 
-            ServiceHelper.GetService<IPushNotificationEventSink>()?
-                .RaiseNotificationReceived(pushMessage);
+            // This is the link into the app: the platform service implements
+            // IPushNotificationEventSink, and the view model is subscribed to the
+            // NotificationReceived event it raises. It is the same singleton instance the view
+            // model resolves as IPushNotificationService (see MauiProgram).
+            var eventSink = ServiceHelper.GetService<IPushNotificationEventSink>();
+
+            if (eventSink is null)
+            {
+                LoggingService<TestAppFirebaseMessagingService>.LogWarning(
+                    "IPushNotificationEventSink could not be resolved; the message will not reach the view model.");
+            }
+            else
+            {
+                eventSink.RaiseNotificationReceived(pushMessage);
+            }
 
             SendNotification(pushMessage);
         }
