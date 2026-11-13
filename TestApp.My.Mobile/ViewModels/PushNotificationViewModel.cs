@@ -45,6 +45,11 @@ namespace TestApp.My.Mobile.ViewModels
             _deviceInstallationService = deviceInstallationService;
             _notificationRegistrationService = notificationRegistrationService;
             _secureStorageService = secureStorageService;
+
+            // Subscribe here rather than only from InitializeAsync. The platform entry points
+            // (FCM service, APNs app delegate) can raise an event before the page first appears,
+            // and a message that arrives before the subscription would otherwise be dropped.
+            Subscribe();
         }
 
         [ObservableProperty]
@@ -198,7 +203,8 @@ namespace TestApp.My.Mobile.ViewModels
         private void OnTokenRefreshed(object? sender, string token)
         {
             // FCM / APNs can hand out a new token at any time (reinstall, restore, rotation).
-            _ = ApplyTokenAsync(token);
+            // The event is raised on a background thread, so marshal before touching bound state.
+            OnMainThread(() => _ = ApplyTokenAsync(token));
         }
 
         private async Task ApplyTokenAsync(string token)
@@ -226,13 +232,18 @@ namespace TestApp.My.Mobile.ViewModels
 
         private void OnNotificationReceived(object? sender, PushMessageDto message)
         {
-            LastMessageTitle = message?.Title;
-            LastMessageBody = message?.Body;
+            // Raised from the FCM service thread / the APNs delegate, so marshal to the UI thread
+            // before touching observable properties and before sending UI-affecting messages.
+            OnMainThread(() =>
+            {
+                LastMessageTitle = message?.Title;
+                LastMessageBody = message?.Body;
 
-            MessageBus.Instance.Publish(Constants.NotificationReceived, message);
+                MessageBus.Instance.Publish(Constants.NotificationReceived, message);
 
-            // Ask the iOS Shell renderer to show a native tab bar badge. Android ignores this.
-            WeakReferenceMessenger.Default.Send(new UpdateBadgeMessage(1));
+                // Ask the iOS Shell renderer to show a native tab bar badge. Android ignores this.
+                WeakReferenceMessenger.Default.Send(new UpdateBadgeMessage(1));
+            });
         }
 
         private void OnNotificationOpened(object? sender, string url)
@@ -244,8 +255,20 @@ namespace TestApp.My.Mobile.ViewModels
 
             if (Uri.TryCreate(url, UriKind.RelativeOrAbsolute, out var uri))
             {
-                Microsoft.Maui.Controls.Application.Current?.SendOnAppLinkRequestReceived(uri);
+                OnMainThread(() =>
+                    Microsoft.Maui.Controls.Application.Current?.SendOnAppLinkRequestReceived(uri));
             }
+        }
+
+        private static void OnMainThread(Action action)
+        {
+            if (MainThread.IsMainThread)
+            {
+                action();
+                return;
+            }
+
+            MainThread.BeginInvokeOnMainThread(action);
         }
     }
 }

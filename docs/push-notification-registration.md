@@ -258,7 +258,9 @@ Same attributes and manifest intent filter as the original
 - `OnNewToken` no longer calls the registration service directly. It raises
   `IPushNotificationEventSink.RaiseTokenRefreshed`. The view model then re-registers.
 - `OnMessageReceived` maps the FCM data payload to `PushMessageDto`, raises
-  `RaiseNotificationReceived`, and builds the local notification.
+  `RaiseNotificationReceived` through `IPushNotificationEventSink`, and builds the local
+  notification. It resolves the sink explicitly and logs a warning if it cannot be resolved
+  (see section 9a).
 - The `NotificationCompat` builder is unchanged (`maui_splash` icon, `PriorityMax`,
   `ChannelId`).
 
@@ -320,8 +322,9 @@ No registration work happens in the delegate, mirroring the Android change.
 
 - `WillPresentNotification` shows banner, list, badge and sound while the app is in the
   foreground and raises `RaiseNotificationReceived`.
-- `DidReceiveNotificationResponse` handles a tap (including deep links) and raises
-  `RaiseNotificationOpened` through `PushMessageFactory` / `NSDataExtensions`.
+- `DidReceiveNotificationResponse` handles a tap. It shows the payload and, when the payload
+  carries `externalDetailsUrl`, raises `RaiseNotificationOpened` through
+  `PushMessageFactory` / `NSDataExtensions`.
 
 Both callbacks forward to `IPushNotificationEventSink`; the view model decides what to do.
 
@@ -422,6 +425,45 @@ raises them through `IPushNotificationEventSink`.
 `ServiceHelper.GetService<T>()` resolves from `IPlatformApplication.Current.Services`, which
 is how `MainActivity`, `TestAppFirebaseMessagingService` and the iOS `AppDelegate` obtain
 their dependencies without constructor injection.
+
+## 9a. How the platform entry points reach `NotificationReceived`
+
+This is the link the app relies on to react to a message while it is running. The platform
+entry points do not call the view model directly. They resolve `IPushNotificationEventSink`,
+which is the same singleton the view model uses as `IPushNotificationService`.
+
+```
+Android: FCM thread                          iOS: APNs / UNUserNotificationCenter
+  TestAppFirebaseMessagingService              AppDelegate.ReceivedRemoteNotification
+      .OnMessageReceived                           PushNotificationDelegate.WillPresentNotification
+        │                                            │
+        └── ServiceHelper.GetService<IPushNotificationEventSink>()
+                     │                                            │
+                     ▼                                            ▼
+        AndroidPushNotificationService.NotificationReceived  iOSPushNotificationService.NotificationReceived
+                     │                                            │
+                     └──────────────► PushNotificationViewModel.OnNotificationReceived ◄──────────────┘
+                                        → LastMessageTitle / LastMessageBody
+                                        → MessageBus.Publish(Constants.NotificationReceived, message)
+                                        → WeakReferenceMessenger.Send(new UpdateBadgeMessage(1))
+```
+
+Three details make the link work:
+
+- **One instance, two interfaces.** `MauiProgram` registers the platform service once and
+  exposes it as both `IPushNotificationService` (the view model subscribes) and
+  `IPushNotificationEventSink` (the entry points raise). If these resolved to different
+  objects the events would go nowhere.
+- **Subscribe early.** The view model subscribes in its constructor, not only from
+  `InitializeAsync`, so a message that arrives before the page first appears is not dropped.
+- **Marshal to the UI thread.** `OnMessageReceived` runs on an FCM background thread and the
+  APNs delegates run on their own threads. The view model handlers hop to the main thread with
+  `MainThread` before touching observable properties or sending UI-affecting messages.
+  Without this the properties change on a non-UI thread and the UI never updates, which makes
+  the link look broken even though the event fired.
+
+`OnMessageReceived` also logs a warning when `IPushNotificationEventSink` cannot be resolved,
+instead of silently dropping the message.
 
 ## 10. Registration sequence
 
@@ -564,7 +606,7 @@ Send notifications with `Platform = FcmV1` for Android and `ApnsV1` for iOS.
 | 3 | Permission denied | `StatusMessage` = permission denied, no HTTP call |
 | 4 | Token rotated (clear app data) | `OnNewToken` fires, device re-registered |
 | 5 | Foreground message | `LastMessageTitle` / `LastMessageBody` update, local notification shown |
-| 6 | Tap notification with deep link | `NotificationOpened` → `SendOnAppLinkRequestReceived` |
+| 6 | Tap notification with deep link (Android + iOS) | `NotificationOpened` → `SendOnAppLinkRequestReceived` |
 | 7 | Deregister | `DELETE /installations/{id}`, cached token removed |
 | 8 | iOS first launch | Permission dialog, APNs token shown, device registered as `ApnsV1` |
 | 9 | Airplane mode | Registration fails, message shown, app does not crash |
