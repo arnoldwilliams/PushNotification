@@ -18,6 +18,8 @@ namespace TestApp.My.Mobile.Platforms.iOS
     {
         private TaskCompletionSource<string>? _tokenCompletion;
 
+        private string? _pendingDeepLink;
+
         // Initialised to a no-op so the events are never null (and no null checks are needed).
         public event EventHandler<string> TokenRefreshed = delegate { };
 
@@ -99,6 +101,16 @@ namespace TestApp.My.Mobile.Platforms.iOS
 
         public void RaiseNotificationReceived(PushMessageDto message) => NotificationReceived?.Invoke(this, message);
 
-        public void RaiseNotificationOpened(string url) => NotificationOpened?.Invoke(this, url);
+        public void RaiseNotificationOpened(string url)
+        {
+            // Buffer first, then notify, so a tap that arrives before the view model subscribes is not
+            // lost. The view model drains the buffer when it subscribes.
+            Interlocked.Exchange(ref _pendingDeepLink, url);
+
+            NotificationOpened?.Invoke(this, url);
+        }
+
+        /// <inheritdoc />
+        public string? ConsumePendingDeepLink() => Interlocked.Exchange(ref _pendingDeepLink, null);
     }
 }

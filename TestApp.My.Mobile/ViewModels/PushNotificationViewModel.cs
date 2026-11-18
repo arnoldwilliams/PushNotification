@@ -87,6 +87,15 @@ namespace TestApp.My.Mobile.ViewModels
             _pushNotificationService.NotificationReceived += OnNotificationReceived;
             _pushNotificationService.NotificationOpened += OnNotificationOpened;
             _subscribed = true;
+
+            // A tap that launched the app can arrive before this subscription (MainActivity.OnCreate
+            // runs before the page appears). The platform service buffered it, so replay it now.
+            var pendingDeepLink = _pushNotificationService.ConsumePendingDeepLink();
+
+            if (!string.IsNullOrWhiteSpace(pendingDeepLink))
+            {
+                OnNotificationOpened(this, pendingDeepLink);
+            }
         }
 
         /// <summary>

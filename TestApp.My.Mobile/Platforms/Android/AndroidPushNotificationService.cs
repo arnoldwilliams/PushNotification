@@ -15,6 +15,8 @@ namespace TestApp.My.Mobile.Platforms.Android
     /// </summary>
     public sealed class AndroidPushNotificationService : IPushNotificationService, IPushNotificationEventSink
     {
+        private string? _pendingDeepLink;
+
         // Initialised to a no-op so the events are never null (and no null checks are needed).
         public event EventHandler<string> TokenRefreshed = delegate { };
 
@@ -70,6 +72,17 @@ namespace TestApp.My.Mobile.Platforms.Android
         public void RaiseNotificationReceived(PushMessageDto message) => NotificationReceived?.Invoke(this, message);
 
         /// <inheritdoc />
-        public void RaiseNotificationOpened(string url) => NotificationOpened?.Invoke(this, url);
+        public void RaiseNotificationOpened(string url)
+        {
+            // Buffer first, then notify. The buffer is the single source of truth for the view model,
+            // so a tap that arrives before it subscribes (MainActivity.OnCreate runs before the page
+            // appears) is not lost.
+            Interlocked.Exchange(ref _pendingDeepLink, url);
+
+            NotificationOpened?.Invoke(this, url);
+        }
+
+        /// <inheritdoc />
+        public string? ConsumePendingDeepLink() => Interlocked.Exchange(ref _pendingDeepLink, null);
     }
 }
