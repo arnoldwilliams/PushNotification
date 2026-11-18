@@ -20,11 +20,6 @@ Full design and setup details are in [`docs/push-notification-registration.md`](
 | `TestApp.My.Mobile/Platforms/iOS/` | `iOSDeviceInstallationService`, `iOSPushNotificationService`, `AppDelegate` |
 | `docs/` | Technical documentation |
 
-The original reference files are kept in the repository root
-(`AndroidDeviceInstallationService.cs`, `MainActivity.cs`, `NotificationRegistrationService.cs`,
-`PNSToken*Listener.cs`, `TestAppFirebaseMessagingService.cs`) for comparison. The project itself
-does not compile them; the equivalents live under `TestApp.My.Mobile/`.
-
 ## Prerequisites
 
 - .NET 10 SDK
