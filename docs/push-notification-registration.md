@@ -275,6 +275,10 @@ Same attributes and manifest intent filter as the original
 `OnNewIntent` was added because the activity is `SingleTop`; a tapped notification reuses
 the instance and would otherwise lose its extras.
 
+`HandleIntent` forwards the link to `IPushNotificationEventSink.RaiseNotificationOpened`. Because
+`OnCreate` runs before the page appears, the platform service buffers the link for a cold start
+(see section 9b).
+
 > The registration block from the original `OnCreate` is gone. That is the whole point of
 > the change.
 
@@ -456,6 +460,10 @@ Three details make the link work:
   objects the events would go nowhere.
 - **Subscribe early.** The view model subscribes in its constructor, not only from
   `InitializeAsync`, so a message that arrives before the page first appears is not dropped.
+- **Buffer the deep link.** A tap can still beat the subscription on a cold start:
+  `MainActivity.OnCreate` calls `HandleIntent` and returns before the page appears. The platform
+  service buffers the link from `RaiseNotificationOpened`, and `Subscribe()` drains it with
+  `ConsumePendingDeepLink()` once the handlers are wired. See section 9b.
 - **Marshal to the UI thread.** `OnMessageReceived` runs on an FCM background thread and the
   APNs delegates run on their own threads. The view model handlers hop to the main thread with
   `MainThread` before touching observable properties or sending UI-affecting messages.
@@ -464,6 +472,54 @@ Three details make the link work:
 
 `OnMessageReceived` also logs a warning when `IPushNotificationEventSink` cannot be resolved,
 instead of silently dropping the message.
+
+## 9b. Cold-start notification taps
+
+A tap that launches the app is a special case, because the tap reaches the platform service
+before the view model has subscribed:
+
+```
+MainActivity.OnCreate
+  └─ base.OnCreate(...)                 (MAUI builds the window)
+  └─ HandleIntent(Intent)               → RaiseNotificationOpened(url)   ← no subscriber yet
+  ...OnCreate returns...
+MainPage.OnAppearing
+  └─ PushNotificationViewModel.InitializeAsync
+       └─ Subscribe()  → NotificationOpened += OnNotificationOpened     ← subscribes here
+```
+
+The event is raised before anything listens, so a plain event would be lost. `Subscribe()` is not
+enough on its own, because it still runs after `OnCreate` returns.
+
+The platform service buffers instead of relying on the event alone:
+
+```csharp
+// AndroidPushNotificationService / iOSPushNotificationService
+public void RaiseNotificationOpened(string url)
+{
+    Interlocked.Exchange(ref _pendingDeepLink, url);   // single source of truth
+    NotificationOpened?.Invoke(this, url);             // live subscribers still get it immediately
+}
+
+public string? ConsumePendingDeepLink() => Interlocked.Exchange(ref _pendingDeepLink, null);
+```
+
+`Subscribe()` drains the buffer once the handlers are wired, so the tap is delivered whenever the
+view model finally subscribes:
+
+```csharp
+// PushNotificationViewModel.Subscribe()
+var pendingDeepLink = _pushNotificationService.ConsumePendingDeepLink();
+
+if (!string.IsNullOrWhiteSpace(pendingDeepLink))
+{
+    OnNotificationOpened(this, pendingDeepLink);
+}
+```
+
+Both paths converge on `OnNotificationOpened`, which validates the url and marshals to the main
+thread before `SendOnAppLinkRequestReceived`. A warm start (app already running) is unaffected:
+the live event fires and the buffer is simply overwritten, then drained by the next `Subscribe()`.
 
 ## 10. Registration sequence
 
@@ -606,7 +662,7 @@ Send notifications with `Platform = FcmV1` for Android and `ApnsV1` for iOS.
 | 3 | Permission denied | `StatusMessage` = permission denied, no HTTP call |
 | 4 | Token rotated (clear app data) | `OnNewToken` fires, device re-registered |
 | 5 | Foreground message | `LastMessageTitle` / `LastMessageBody` update, local notification shown |
-| 6 | Tap notification with deep link (Android + iOS) | `NotificationOpened` → `SendOnAppLinkRequestReceived` |
+| 6 | Tap notification with deep link (Android + iOS, cold and warm start) | `NotificationOpened` → `SendOnAppLinkRequestReceived` |
 | 7 | Deregister | `DELETE /installations/{id}`, cached token removed |
 | 8 | iOS first launch | Permission dialog, APNs token shown, device registered as `ApnsV1` |
 | 9 | Airplane mode | Registration fails, message shown, app does not crash |
